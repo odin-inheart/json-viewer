@@ -1,0 +1,9 @@
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+#json-editor {
+  font-family: "Fira Code", "Consolas", monospace;
+  font-size: 0.9rem;
+}
