@@ -40,8 +40,9 @@ function setMessage(text, type = "info") {
   }
 }
 
+
 // ----------------------
-// 1) Load JSON from server
+//  Load JSON from server
 // ----------------------
 
 async function loadFromServer() {
@@ -74,7 +75,7 @@ async function loadFromServer() {
 }
 
 // ----------------------
-// 2) Save JSON to server
+//  Save JSON to server
 // ----------------------
 
 async function saveToServer() {
@@ -130,7 +131,7 @@ async function saveToServer() {
 }
 
 // -----------------------------
-// 3) Load JSON from a local file
+//  Load JSON from a local file
 // -----------------------------
 
 function handleFileChange(event) {
@@ -181,7 +182,7 @@ function handleFileChange(event) {
 }
 
 // -----------------------------
-// 4) Table view (JSON analysis)
+// Table view (JSON analysis)
 // -----------------------------
 
 // Parse the editor content as JSON
@@ -517,7 +518,7 @@ function renderFilteredTable() {
 }
 
 // -----------------------------
-// 5) Row edit apply / cancel
+//  Row edit apply / cancel
 // -----------------------------
 
 function applySelectedRowChanges() {
@@ -607,7 +608,7 @@ function cancelRowEditing() {
 }
 
 // -----------------------------
-// 6) Event listeners
+//  Event listeners
 // -----------------------------
 
 loadBtn.addEventListener("click", loadFromServer);
@@ -626,3 +627,64 @@ cancelRowEditBtn.addEventListener("click", cancelRowEditing);
 window.addEventListener("DOMContentLoaded", () => {
   loadFromServer();
 });
+// -----------------------------
+// 7) Theme toggle (light / dark)
+// -----------------------------
+
+const toggleThemeBtn = document.getElementById("toggle-theme-btn");
+
+function applyTheme(mode) {
+  // Set Bootstrap theme attribute on <html>
+  document.documentElement.setAttribute("data-bs-theme", mode);
+
+  // Basic body background / text color
+  document.body.classList.toggle("bg-light", mode === "light");
+  document.body.classList.toggle("bg-dark", mode === "dark");
+  document.body.classList.toggle("text-light", mode === "dark");
+
+  // NAVBAR
+  applyNavbarTheme(mode);
+
+  // Persist choice
+  localStorage.setItem("theme", mode);
+}
+
+function applyNavbarTheme(mode) {
+  const navbar = document.getElementById("main-navbar");
+  if (!navbar) return;
+
+  if (mode === "dark") {
+    navbar.classList.remove("navbar-light", "bg-white");
+    navbar.classList.add("navbar-dark", "bg-dark");
+  } else {
+    navbar.classList.remove("navbar-dark", "bg-dark");
+    navbar.classList.add("navbar-light", "bg-white");
+  }
+}
+
+
+function initTheme() {
+  const saved = localStorage.getItem("theme");
+  let mode;
+
+  if (saved === "light" || saved === "dark") {
+    mode = saved;
+  } else {
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mode = prefersDark ? "dark" : "light";
+  }
+
+  applyTheme(mode);
+}
+
+if (toggleThemeBtn) {
+  toggleThemeBtn.addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-bs-theme") || "light";
+    const next = current === "dark" ? "light" : "dark";
+    applyTheme(next);
+  });
+}
+
+// Initialize on page load
+initTheme();
+
