@@ -11,12 +11,21 @@ const tableFilterInput = document.getElementById("table-filter-input");
 const tableContainer = document.getElementById("table-container");
 const tableKeySelect = document.getElementById("table-key-select");
 
+// Row editing controls (Option 2)
+const applyRowEditBtn = document.getElementById("apply-row-edit");
+const cancelRowEditBtn = document.getElementById("cancel-row-edit");
 
 // In-memory state
 let lastParsedJson = null;
 let tableSources = []; // { id, label, rows }
 let currentRows = [];
 let currentHeaders = [];
+let currentSectionId = null;
+
+// Row edit mode state
+let rowEditMode = false;
+let selectedRowInfo = null; // { sectionId, kind: 'root'|'array'|'object', index?, key? }
+let fullJsonBackup = null;  // string: full JSON text before entering row edit mode
 
 // Display status messages to the user
 function setMessage(text, type = "info") {
@@ -48,6 +57,12 @@ async function loadFromServer() {
     const data = await response.json();
     editor.value = JSON.stringify(data, null, 2);
 
+    // We are back to full JSON mode
+    rowEditMode = false;
+    selectedRowInfo = null;
+    fullJsonBackup = null;
+    lastParsedJson = data;
+
     setMessage("JSON loaded from server.", "success");
 
     // Update table view based on the new JSON content
@@ -63,6 +78,15 @@ async function loadFromServer() {
 // ----------------------
 
 async function saveToServer() {
+  // Do not allow saving while only a single row is being edited
+  if (rowEditMode) {
+    setMessage(
+      "You are currently editing a single entry. Apply or cancel the row edit before saving the full JSON.",
+      "error"
+    );
+    return;
+  }
+
   try {
     setMessage("Validating JSON...");
 
@@ -94,6 +118,7 @@ async function saveToServer() {
     const result = await response.json();
 
     if (result.success) {
+      lastParsedJson = parsed;
       setMessage("JSON successfully saved on the server.", "success");
     } else {
       setMessage("The server returned an error while saving JSON.", "error");
@@ -128,6 +153,11 @@ function handleFileChange(event) {
       const parsed = JSON.parse(content);
 
       editor.value = JSON.stringify(parsed, null, 2);
+
+      lastParsedJson = parsed;
+      rowEditMode = false;
+      selectedRowInfo = null;
+      fullJsonBackup = null;
 
       setMessage(
         `JSON loaded from file "${file.name}". You can edit it and optionally save it to the server.`,
@@ -218,6 +248,7 @@ function computeTableSources(parsed) {
 
 // Update table sources based on the current editor JSON
 function updateTableViewFromEditor() {
+  // We assume here that the editor contains the full JSON, not a single row.
   const parsed = parseEditorJson();
   lastParsedJson = parsed;
 
@@ -264,6 +295,8 @@ function fillTableSectionSelect() {
 // Render table for the currently selected section
 function renderTableForCurrentSelection() {
   const sectionId = tableSectionSelect.value;
+  currentSectionId = sectionId || null;
+
   if (!sectionId) {
     tableContainer.innerHTML =
       '<p class="text-muted mb-0">No section selected.</p>';
@@ -328,6 +361,78 @@ function fillKeyFilterSelect() {
   });
 }
 
+// Make a row selectable for editing in the main editor
+function selectRowForEditing(row) {
+  if (!lastParsedJson || !currentSectionId) {
+    setMessage("Cannot determine context for the selected row.", "error");
+    return;
+  }
+
+  fullJsonBackup = editor.value;
+  rowEditMode = true;
+
+  let kind = null;
+  let info = { sectionId: currentSectionId, kind: null, index: null, key: null };
+
+  if (currentSectionId === "__root__") {
+    // Root is an array
+    if (!Array.isArray(lastParsedJson)) {
+      setMessage("Root is not an array; cannot map selected row.", "error");
+      rowEditMode = false;
+      return;
+    }
+    const index = currentRows.indexOf(row);
+    if (index < 0) {
+      setMessage("Unable to locate selected row in root array.", "error");
+      rowEditMode = false;
+      return;
+    }
+    kind = "root";
+    info.kind = kind;
+    info.index = index;
+  } else {
+    const section = lastParsedJson[currentSectionId];
+    if (Array.isArray(section)) {
+      const index = currentRows.indexOf(row);
+      if (index < 0) {
+        setMessage("Unable to locate selected row in section array.", "error");
+        rowEditMode = false;
+        return;
+      }
+      kind = "array";
+      info.kind = kind;
+      info.index = index;
+    } else if (section && typeof section === "object") {
+      const rowKey = row._key;
+      if (!rowKey) {
+        setMessage("Selected row has no _key field; cannot map it.", "error");
+        rowEditMode = false;
+        return;
+      }
+      if (!(rowKey in section)) {
+        setMessage("Selected _key does not exist in the JSON object.", "error");
+        rowEditMode = false;
+        return;
+      }
+      kind = "object";
+      info.kind = kind;
+      info.key = rowKey;
+    } else {
+      setMessage("Current section is neither an array nor an object.", "error");
+      rowEditMode = false;
+      return;
+    }
+  }
+
+  selectedRowInfo = info;
+
+  // Show only the selected row JSON in the main editor
+  editor.value = JSON.stringify(row, null, 2);
+  setMessage(
+    "You are now editing a single entry. Use 'Apply selected row to JSON' to merge it back, or 'Cancel' to go back.",
+    "info"
+  );
+}
 
 // Apply text filter and render the table HTML
 function renderFilteredTable() {
@@ -337,7 +442,6 @@ function renderFilteredTable() {
     return;
   }
 
-
   const filterText = tableFilterInput.value.trim().toLowerCase();
   const selectedKey = tableKeySelect.value;
 
@@ -345,7 +449,10 @@ function renderFilteredTable() {
   let rowsToFilter = currentRows;
   if (selectedKey) {
     rowsToFilter = rowsToFilter.filter(
-      (row) => row && row._key !== undefined && String(row._key) === selectedKey
+      (row) =>
+        row &&
+        row._key !== undefined &&
+        String(row._key) === String(selectedKey)
     );
   }
 
@@ -358,7 +465,6 @@ function renderFilteredTable() {
       return String(value).toLowerCase().includes(filterText);
     });
   });
-
 
   const table = document.createElement("table");
   table.className = "table table-sm table-striped table-hover mb-0";
@@ -379,6 +485,12 @@ function renderFilteredTable() {
 
   filteredRows.forEach((row) => {
     const tr = document.createElement("tr");
+
+    // Make the row clickable to load it into the main editor
+    tr.style.cursor = "pointer";
+    tr.addEventListener("click", () => {
+      selectRowForEditing(row);
+    });
 
     currentHeaders.forEach((key) => {
       const td = document.createElement("td");
@@ -405,7 +517,97 @@ function renderFilteredTable() {
 }
 
 // -----------------------------
-// 5) Event listeners
+// 5) Row edit apply / cancel
+// -----------------------------
+
+function applySelectedRowChanges() {
+  if (!rowEditMode || !selectedRowInfo || !lastParsedJson) {
+    setMessage("No row edit in progress.", "error");
+    return;
+  }
+
+  let updatedRow;
+  try {
+    updatedRow = JSON.parse(editor.value);
+  } catch (error) {
+    setMessage("Editor contains invalid JSON for the selected row.", "error");
+    console.error("Error parsing row JSON:", error);
+    return;
+  }
+
+  try {
+    const { sectionId, kind, index, key } = selectedRowInfo;
+
+    if (kind === "root") {
+      if (!Array.isArray(lastParsedJson)) {
+        throw new Error("Root is not an array.");
+      }
+      if (index == null || index < 0 || index >= lastParsedJson.length) {
+        throw new Error("Invalid index for root array.");
+      }
+      lastParsedJson[index] = updatedRow;
+    } else if (kind === "array") {
+      const section = lastParsedJson[sectionId];
+      if (!Array.isArray(section)) {
+        throw new Error("Section is not an array.");
+      }
+      if (index == null || index < 0 || index >= section.length) {
+        throw new Error("Invalid index for section array.");
+      }
+      section[index] = updatedRow;
+    } else if (kind === "object") {
+      const section = lastParsedJson[sectionId];
+      if (!section || typeof section !== "object" || Array.isArray(section)) {
+        throw new Error("Section is not an object of entries.");
+      }
+      if (!key || !(key in section)) {
+        throw new Error("Invalid key for object section.");
+      }
+
+      // Do not allow changing the key name via row editor: ignore updatedRow._key
+      const { _key, ...rest } = updatedRow;
+      section[key] = rest;
+    } else {
+      throw new Error("Unknown row kind.");
+    }
+
+    // Back to full JSON mode
+    editor.value = JSON.stringify(lastParsedJson, null, 2);
+    rowEditMode = false;
+    selectedRowInfo = null;
+    fullJsonBackup = null;
+
+    updateTableViewFromEditor();
+    setMessage("Row changes applied to the full JSON.", "success");
+  } catch (error) {
+    console.error("Error while applying row changes:", error);
+    setMessage("Failed to apply row changes to the full JSON.", "error");
+  }
+}
+
+function cancelRowEditing() {
+  if (!rowEditMode) {
+    setMessage("No row edit in progress.", "info");
+    return;
+  }
+
+  if (fullJsonBackup) {
+    editor.value = fullJsonBackup;
+  } else if (lastParsedJson) {
+    editor.value = JSON.stringify(lastParsedJson, null, 2);
+  }
+
+  rowEditMode = false;
+  selectedRowInfo = null;
+  fullJsonBackup = null;
+  setMessage("Row editing cancelled. Full JSON restored.", "info");
+
+  // Optional: refresh table view
+  updateTableViewFromEditor();
+}
+
+// -----------------------------
+// 6) Event listeners
 // -----------------------------
 
 loadBtn.addEventListener("click", loadFromServer);
@@ -416,6 +618,9 @@ refreshTableBtn.addEventListener("click", updateTableViewFromEditor);
 tableSectionSelect.addEventListener("change", renderTableForCurrentSelection);
 tableFilterInput.addEventListener("input", renderFilteredTable);
 tableKeySelect.addEventListener("change", renderFilteredTable);
+
+applyRowEditBtn.addEventListener("click", applySelectedRowChanges);
+cancelRowEditBtn.addEventListener("click", cancelRowEditing);
 
 // Load JSON from server when the page is ready
 window.addEventListener("DOMContentLoaded", () => {
