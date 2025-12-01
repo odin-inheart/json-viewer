@@ -337,9 +337,20 @@ function renderFilteredTable() {
     return;
   }
 
-  const filterText = tableFilterInput.value.trim().toLowerCase();
 
-  const filteredRows = currentRows.filter((row) => {
+  const filterText = tableFilterInput.value.trim().toLowerCase();
+  const selectedKey = tableKeySelect.value;
+
+  // First filter on _key if selected
+  let rowsToFilter = currentRows;
+  if (selectedKey) {
+    rowsToFilter = rowsToFilter.filter(
+      (row) => row && row._key !== undefined && String(row._key) === selectedKey
+    );
+  }
+
+  // Then apply text filter
+  const filteredRows = rowsToFilter.filter((row) => {
     if (!filterText) return true;
     return currentHeaders.some((key) => {
       const value = row[key];
@@ -347,6 +358,7 @@ function renderFilteredTable() {
       return String(value).toLowerCase().includes(filterText);
     });
   });
+
 
   const table = document.createElement("table");
   table.className = "table table-sm table-striped table-hover mb-0";
@@ -403,6 +415,7 @@ fileInput.addEventListener("change", handleFileChange);
 refreshTableBtn.addEventListener("click", updateTableViewFromEditor);
 tableSectionSelect.addEventListener("change", renderTableForCurrentSelection);
 tableFilterInput.addEventListener("input", renderFilteredTable);
+tableKeySelect.addEventListener("change", renderFilteredTable);
 
 // Load JSON from server when the page is ready
 window.addEventListener("DOMContentLoaded", () => {
