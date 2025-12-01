@@ -4,7 +4,21 @@ const saveBtn = document.getElementById("save-to-server");
 const fileInput = document.getElementById("json-file-input");
 const message = document.getElementById("message");
 
-// Affichage des messages utilisateur
+// Elements for the table view
+const refreshTableBtn = document.getElementById("refresh-table");
+const tableSectionSelect = document.getElementById("table-section-select");
+const tableFilterInput = document.getElementById("table-filter-input");
+const tableContainer = document.getElementById("table-container");
+const tableKeySelect = document.getElementById("table-key-select");
+
+
+// In-memory state
+let lastParsedJson = null;
+let tableSources = []; // { id, label, rows }
+let currentRows = [];
+let currentHeaders = [];
+
+// Display status messages to the user
 function setMessage(text, type = "info") {
   message.textContent = text;
 
@@ -17,78 +31,92 @@ function setMessage(text, type = "info") {
   }
 }
 
-// load json from server
+// ----------------------
+// 1) Load JSON from server
+// ----------------------
+
 async function loadFromServer() {
   try {
-    setMessage("Chargement du JSON depuis le serveur...");
+    setMessage("Loading JSON from server...");
 
     const response = await fetch("/api/data");
 
     if (!response.ok) {
-      throw new Error("Réponse serveur non valide");
+      throw new Error("Unexpected server response");
     }
 
     const data = await response.json();
-
-    // 
     editor.value = JSON.stringify(data, null, 2);
 
-    setMessage("JSON chargé depuis le serveur", "success");
+    setMessage("JSON loaded from server.", "success");
+
+    // Update table view based on the new JSON content
+    updateTableViewFromEditor();
   } catch (error) {
-    console.error("Erreur lors du chargement du JSON :", error);
-    setMessage("Erreur lors du chargement du JSON serveur ❌", "error");
+    console.error("Error while loading JSON from server:", error);
+    setMessage("Failed to load JSON from server.", "error");
   }
 }
 
-// Save Json to server - in progress
+// ----------------------
+// 2) Save JSON to server
+// ----------------------
+
 async function saveToServer() {
   try {
-    setMessage("Vérification du JSON...");
+    setMessage("Validating JSON...");
 
     let parsed;
     try {
       parsed = JSON.parse(editor.value);
     } catch (error) {
-      setMessage("JSON invalide ❌", "error");
+      setMessage(
+        "Invalid JSON: please check commas, quotes and structure.",
+        "error"
+      );
       return;
     }
 
-    setMessage("Envoi au serveur...");
+    setMessage("Sending data to server...");
 
     const response = await fetch("/api/data", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(parsed),
     });
 
-    if (!response.ok) throw new Error("Erreur serveur");
+    if (!response.ok) {
+      throw new Error("Unexpected server error while saving");
+    }
 
     const result = await response.json();
 
     if (result.success) {
-      setMessage("JSON sauvegardé avec succès 💾✅", "success");
+      setMessage("JSON successfully saved on the server.", "success");
     } else {
-      setMessage("Le serveur a renvoyé une erreur ❌", "error");
+      setMessage("The server returned an error while saving JSON.", "error");
     }
   } catch (error) {
-    console.error(error);
-    setMessage("Impossible de sauvegarder le JSON ❌", "error");
+    console.error("Error while saving JSON:", error);
+    setMessage("Failed to save JSON on the server.", "error");
   }
 }
 
+// -----------------------------
+// 3) Load JSON from a local file
+// -----------------------------
 
-
-// Load a local JSON - in progess
 function handleFileChange(event) {
   const file = event.target.files[0];
   if (!file) {
-    setMessage("Aucun fichier sélectionné.", "info");
+    setMessage("No file selected.", "info");
     return;
   }
 
-  // Vérification de l’extension (basique mais utile)
   if (!file.name.endsWith(".json")) {
-    setMessage("Merci de choisir un fichier .json", "error");
+    setMessage("Please select a .json file.", "error");
     return;
   }
 
@@ -97,38 +125,286 @@ function handleFileChange(event) {
   reader.onload = () => {
     try {
       const content = reader.result;
-
-      // On vérifie que le contenu est un JSON valide
       const parsed = JSON.parse(content);
 
-      // Si OK, on l'affiche formaté dans le textarea
       editor.value = JSON.stringify(parsed, null, 2);
 
       setMessage(
-        `JSON chargé depuis le fichier "${file.name}". Tu peux maintenant l'éditer et, si tu veux, le sauvegarder sur le serveur.`,
+        `JSON loaded from file "${file.name}". You can edit it and optionally save it to the server.`,
         "success"
       );
+
+      // Update table view based on the new JSON content
+      updateTableViewFromEditor();
     } catch (error) {
-      console.error("Erreur lors de la lecture du fichier JSON :", error);
-      setMessage("Le fichier sélectionné ne contient pas un JSON valide ❌", "error");
+      console.error("Error while parsing JSON file:", error);
+      setMessage("The selected file does not contain valid JSON.", "error");
     }
   };
 
   reader.onerror = () => {
-    console.error("Erreur de lecture du fichier :", reader.error);
-    setMessage("Erreur lors de la lecture du fichier ❌", "error");
+    console.error("File read error:", reader.error);
+    setMessage("An error occurred while reading the file.", "error");
   };
 
   reader.readAsText(file, "utf-8");
 }
 
+// -----------------------------
+// 4) Table view (JSON analysis)
+// -----------------------------
 
-// Event listeners
+// Parse the editor content as JSON
+function parseEditorJson() {
+  try {
+    const text = editor.value;
+    const parsed = JSON.parse(text);
+    return parsed;
+  } catch (error) {
+    console.warn("Unable to parse JSON from editor:", error);
+    return null;
+  }
+}
+
+// Determine possible table sources within the JSON
+function computeTableSources(parsed) {
+  const sources = [];
+
+  if (!parsed) return sources;
+
+  // Case 1: root is an array of objects
+  if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === "object") {
+    sources.push({
+      id: "__root__",
+      label: `Root (array with ${parsed.length} items)`,
+      rows: parsed,
+    });
+  }
+
+  // Case 2: root is an object, inspect its properties
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    for (const [key, value] of Object.entries(parsed)) {
+      // 2.a) property is an array of objects
+      if (Array.isArray(value) && value.length > 0 && typeof value[0] === "object") {
+        sources.push({
+          id: key,
+          label: `${key} (array with ${value.length} items)`,
+          rows: value,
+        });
+      }
+      // 2.b) property is an object whose values are objects (e.g. "Meshes")
+      else if (value && typeof value === "object" && !Array.isArray(value)) {
+        const rows = Object.entries(value).map(([k, v]) => {
+          if (v && typeof v === "object") {
+            return { _key: k, ...v };
+          } else {
+            return { _key: k, value: v };
+          }
+        });
+
+        if (rows.length > 0 && typeof rows[0] === "object") {
+          sources.push({
+            id: key,
+            label: `${key} (object with ${rows.length} entries)`,
+            rows,
+          });
+        }
+      }
+    }
+  }
+
+  return sources;
+}
+
+// Update table sources based on the current editor JSON
+function updateTableViewFromEditor() {
+  const parsed = parseEditorJson();
+  lastParsedJson = parsed;
+
+  tableSources = computeTableSources(parsed);
+
+  // Update the section selector
+  fillTableSectionSelect();
+  // Render the table for the selected section (or first available)
+  renderTableForCurrentSelection();
+}
+
+// Fill the <select> with available table sources
+function fillTableSectionSelect() {
+  const previousSelection = tableSectionSelect.value;
+
+  // Clear existing options
+  tableSectionSelect.innerHTML = "";
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = tableSources.length
+    ? "(Select a section)"
+    : "(No table view available)";
+  tableSectionSelect.appendChild(defaultOption);
+
+  for (const source of tableSources) {
+    const opt = document.createElement("option");
+    opt.value = source.id;
+    opt.textContent = source.label;
+    tableSectionSelect.appendChild(opt);
+  }
+
+  // Restore previous selection if still valid
+  if (
+    previousSelection &&
+    tableSources.some((s) => s.id === previousSelection)
+  ) {
+    tableSectionSelect.value = previousSelection;
+  } else if (tableSources.length > 0) {
+    // Otherwise select the first available section by default
+    tableSectionSelect.value = tableSources[0].id;
+  }
+}
+
+// Render table for the currently selected section
+function renderTableForCurrentSelection() {
+  const sectionId = tableSectionSelect.value;
+  if (!sectionId) {
+    tableContainer.innerHTML =
+      '<p class="text-muted mb-0">No section selected.</p>';
+    currentRows = [];
+    currentHeaders = [];
+    return;
+  }
+
+  const source = tableSources.find((s) => s.id === sectionId);
+  if (!source) {
+    tableContainer.innerHTML =
+      '<p class="text-muted mb-0">Selected section not found.</p>';
+    currentRows = [];
+    currentHeaders = [];
+    return;
+  }
+
+  const rows = source.rows || [];
+  currentRows = rows;
+
+  // Collect all keys used across rows to define the columns
+  const headersSet = new Set();
+  rows.forEach((row) => {
+    if (row && typeof row === "object") {
+      Object.keys(row).forEach((key) => headersSet.add(key));
+    }
+  });
+  currentHeaders = Array.from(headersSet);
+
+  // Fill key filter select
+  fillKeyFilterSelect();
+
+  // Render the table
+  renderFilteredTable();
+}
+
+function fillKeyFilterSelect() {
+  // Reset options
+  tableKeySelect.innerHTML = "";
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = "All keys";
+  tableKeySelect.appendChild(defaultOption);
+
+  if (!currentRows.length) {
+    return;
+  }
+
+  // Collect distinct _key values if present
+  const keySet = new Set();
+  currentRows.forEach((row) => {
+    if (row && typeof row === "object" && "_key" in row) {
+      keySet.add(row._key);
+    }
+  });
+
+  Array.from(keySet).forEach((key) => {
+    const opt = document.createElement("option");
+    opt.value = String(key);
+    opt.textContent = String(key);
+    tableKeySelect.appendChild(opt);
+  });
+}
+
+
+// Apply text filter and render the table HTML
+function renderFilteredTable() {
+  if (!currentRows.length || !currentHeaders.length) {
+    tableContainer.innerHTML =
+      '<p class="text-muted mb-0">No data to display.</p>';
+    return;
+  }
+
+  const filterText = tableFilterInput.value.trim().toLowerCase();
+
+  const filteredRows = currentRows.filter((row) => {
+    if (!filterText) return true;
+    return currentHeaders.some((key) => {
+      const value = row[key];
+      if (value === null || value === undefined) return false;
+      return String(value).toLowerCase().includes(filterText);
+    });
+  });
+
+  const table = document.createElement("table");
+  table.className = "table table-sm table-striped table-hover mb-0";
+
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+
+  currentHeaders.forEach((key) => {
+    const th = document.createElement("th");
+    th.textContent = key;
+    headerRow.appendChild(th);
+  });
+
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+
+  filteredRows.forEach((row) => {
+    const tr = document.createElement("tr");
+
+    currentHeaders.forEach((key) => {
+      const td = document.createElement("td");
+      const value = row[key];
+
+      if (value === null || value === undefined) {
+        td.textContent = "";
+      } else if (typeof value === "object") {
+        // For nested objects/arrays, show a compact JSON representation
+        td.textContent = JSON.stringify(value);
+      } else {
+        td.textContent = String(value);
+      }
+
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  tableContainer.innerHTML = "";
+  tableContainer.appendChild(table);
+}
+
+// -----------------------------
+// 5) Event listeners
+// -----------------------------
+
 loadBtn.addEventListener("click", loadFromServer);
 saveBtn.addEventListener("click", saveToServer);
 fileInput.addEventListener("change", handleFileChange);
 
-// Load JSON when page loads
+refreshTableBtn.addEventListener("click", updateTableViewFromEditor);
+tableSectionSelect.addEventListener("change", renderTableForCurrentSelection);
+tableFilterInput.addEventListener("input", renderFilteredTable);
+
+// Load JSON from server when the page is ready
 window.addEventListener("DOMContentLoaded", () => {
   loadFromServer();
 });
