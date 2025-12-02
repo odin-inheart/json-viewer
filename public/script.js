@@ -155,20 +155,19 @@ function handleFileChange(event) {
       const content = reader.result;
       const parsed = JSON.parse(content);
 
-      editor.value = JSON.stringify(parsed, null, 2);
+      originalJson = parsed;
+      workingJson = JSON.parse(JSON.stringify(parsed));
 
-      lastParsedJson = parsed;
-      rowEditMode = false;
-      selectedRowInfo = null;
-      fullJsonBackup = null;
+      editor.value = JSON.stringify(workingJson, null, 2);
 
       setMessage(
         `JSON loaded from file "${file.name}". You can edit it and optionally save it to the server.`,
         "success"
       );
 
-      // Update table view based on the new JSON content
-      updateTableViewFromEditor();
+      // Rebuild sections & table
+      updateTableSectionsAndRender();
+
     } catch (error) {
       console.error("Error while parsing JSON file:", error);
       setMessage("The selected file does not contain valid JSON.", "error");
@@ -187,6 +186,300 @@ function handleFileChange(event) {
 // Table view (JSON analysis)
 // -----------------------------
 
+// -----------------------------
+// Table view (projection + mapping)
+// -----------------------------
+
+// 1) Compute table sections (root, top-level arrays/objects)
+function computeTableSections(rootJson) {
+  const sections = [];
+  if (!rootJson) return sections;
+
+  // Case 1: root is an array of objects -> "__root__"
+  if (Array.isArray(rootJson) && rootJson.length > 0 && typeof rootJson[0] === "object") {
+    sections.push({
+      id: "__root__",
+      label: `Root (array with ${rootJson.length} items)`,
+      path: [],         // root path
+      json: rootJson,   // reference to that array in workingJson
+    });
+  }
+
+  // Case 2: root is an object -> inspect properties
+  if (rootJson && typeof rootJson === "object" && !Array.isArray(rootJson)) {
+    for (const [key, value] of Object.entries(rootJson)) {
+      // 2.a) property = array of objects
+      if (Array.isArray(value) && value.length > 0 && typeof value[0] === "object") {
+        sections.push({
+          id: key,
+          label: `${key} (array with ${value.length} items)`,
+          path: [key],
+          json: value,
+        });
+      }
+      // 2.b) property = object with object values (e.g. Meshes)
+      else if (value && typeof value === "object" && !Array.isArray(value)) {
+        const hasObjectValues = Object.values(value).some(
+          (v) => v && typeof v === "object"
+        );
+        if (hasObjectValues) {
+          const count = Object.keys(value).length;
+          sections.push({
+            id: key,
+            label: `${key} (object with ${count} entries)`,
+            path: [key],
+            json: value,
+          });
+        }
+      }
+    }
+  }
+
+  return sections;
+}
+
+// 2) Build table projection + mapping from a given section
+function buildTableProjection(json, sectionPath = []) {
+  const rows = [];
+  const mapping = [];
+
+  // Case A: array of objects
+  if (Array.isArray(json)) {
+    json.forEach((item, index) => {
+      if (item && typeof item === "object") {
+        rows.push(item);
+        mapping.push({
+          parentPath: [...sectionPath],
+          index: index,
+          key: null,
+        });
+      }
+    });
+    return { rows, mapping };
+  }
+
+  // Case B: object whose values are objects (e.g. Meshes)
+  if (json && typeof json === "object") {
+    Object.entries(json).forEach(([key, value]) => {
+      if (value && typeof value === "object") {
+        rows.push({
+          __key: key,       // colonne d’affichage
+          ...value          // les champs d’origine
+        });
+        mapping.push({
+          parentPath: [...sectionPath],
+          index: null,
+          key: key,
+        });
+      }
+    });
+    return { rows, mapping };
+  }
+
+  // Not a supported structure for table view
+  return { rows: [], mapping: [] };
+}
+
+// 3) Rebuild sections and render the current selection
+function updateTableSectionsAndRender() {
+  if (!workingJson) {
+    tableSections = [];
+    currentSection = null;
+    tableContainer.innerHTML =
+      '<p class="text-muted mb-0">No data available.</p>';
+    return;
+  }
+
+  tableSections = computeTableSections(workingJson);
+  fillTableSectionSelect();
+  renderCurrentSection();
+}
+
+// 4) Fill <select> with sections
+function fillTableSectionSelect() {
+  const previousSelection = tableSectionSelect.value;
+
+  tableSectionSelect.innerHTML = "";
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = tableSections.length
+    ? "(Select a section)"
+    : "(No table view available)";
+  tableSectionSelect.appendChild(defaultOption);
+
+  tableSections.forEach((section) => {
+    const opt = document.createElement("option");
+    opt.value = section.id;
+    opt.textContent = section.label;
+    tableSectionSelect.appendChild(opt);
+  });
+
+  // Restore previous selection if possible
+  if (previousSelection && tableSections.some((s) => s.id === previousSelection)) {
+    tableSectionSelect.value = previousSelection;
+    currentSection = tableSections.find((s) => s.id === previousSelection) || null;
+  } else if (tableSections.length > 0) {
+    tableSectionSelect.value = tableSections[0].id;
+    currentSection = tableSections[0];
+  } else {
+    currentSection = null;
+  }
+}
+
+// 5) Render the currently selected section as a table
+function renderCurrentSection() {
+  const selectedId = tableSectionSelect.value;
+
+  if (!selectedId) {
+    tableContainer.innerHTML =
+      '<p class="text-muted mb-0">No section selected.</p>';
+    tableRows = [];
+    tableColumns = [];
+    rowMapping = [];
+    return;
+  }
+
+  const section = tableSections.find((s) => s.id === selectedId);
+  if (!section) {
+    tableContainer.innerHTML =
+      '<p class="text-muted mb-0">Selected section not found.</p>';
+    tableRows = [];
+    tableColumns = [];
+    rowMapping = [];
+    return;
+  }
+
+  currentSection = section;
+
+  const { rows, mapping } = buildTableProjection(section.json, section.path);
+  tableRows = rows;
+  rowMapping = mapping;
+
+  // Collect all column names
+  const colSet = new Set();
+  tableRows.forEach((row) => {
+    if (row && typeof row === "object") {
+      Object.keys(row).forEach((k) => colSet.add(k));
+    }
+  });
+  tableColumns = Array.from(colSet);
+
+  renderTable();
+}
+
+// 6) Render table with editable cells
+function renderTable() {
+  if (!tableRows.length || !tableColumns.length) {
+    tableContainer.innerHTML =
+      '<p class="text-muted mb-0">No data to display.</p>';
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.className = "table table-sm table-striped table-hover mb-0 excel-table";
+
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+
+  tableColumns.forEach((col) => {
+    const th = document.createElement("th");
+    th.textContent = col;
+    headerRow.appendChild(th);
+  });
+
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+
+  tableRows.forEach((row, rowIndex) => {
+    const tr = document.createElement("tr");
+
+    tableColumns.forEach((col) => {
+      const td = document.createElement("td");
+      td.className = "excel-cell";
+
+      const value = row[col];
+
+      if (typeof value === "boolean") {
+        // Checkbox for booleans
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = value;
+
+        checkbox.addEventListener("change", () => {
+          applyCellUpdate(rowIndex, col, checkbox.checked);
+        });
+
+        td.appendChild(checkbox);
+        td.title = String(value); // tooltip sur hover
+      } else {
+        // Editable text cell (ellipsis style handled by CSS)
+        const text = value != null ? String(value) : "";
+        td.contentEditable = true;
+        td.textContent = text;
+        td.title = text; // tooltip avec la valeur complète
+
+        td.addEventListener("blur", () => {
+          applyCellUpdate(rowIndex, col, td.textContent);
+        });
+      }
+
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+
+  table.appendChild(tbody);
+  tableContainer.innerHTML = "";
+  tableContainer.appendChild(table);
+}
+
+// 7) Apply a cell update into workingJson using the mapping
+function applyCellUpdate(rowIndex, column, newValue) {
+  const info = rowMapping[rowIndex];
+  if (!info || !workingJson) return;
+
+  // Traverse workingJson using parentPath
+  let parent = workingJson;
+  info.parentPath.forEach((key) => {
+    parent = parent[key];
+  });
+
+  if (info.index != null) {
+    // Array case
+    parent[info.index][column] = parseCellValue(newValue);
+  } else if (info.key != null) {
+    // Object case (e.g. Meshes)
+    parent[info.key][column] = parseCellValue(newValue);
+  }
+
+  // Reflect in editor (full JSON text)
+  editor.value = JSON.stringify(workingJson, null, 2);
+  setMessage("Change applied (not saved to server yet).", "info");
+}
+
+// 8) Try to preserve types (boolean / number / string)
+function parseCellValue(value) {
+  // Value can already be boolean (checkbox case)
+  if (typeof value === "boolean") return value;
+
+  const trimmed = String(value).trim();
+
+  if (trimmed === "true") return true;
+  if (trimmed === "false") return false;
+
+  const num = Number(trimmed);
+  if (!Number.isNaN(num) && trimmed !== "") {
+    return num;
+  }
+
+  return trimmed;
+}
+
+
 // Parse the editor content as JSON
 function parseEditorJson() {
   try {
@@ -200,16 +493,6 @@ function parseEditorJson() {
 }
 
 
-
-
-
-
-
-
-
-
-
-
 // -----------------------------
 //  Event listeners
 // -----------------------------
@@ -217,6 +500,10 @@ function parseEditorJson() {
 loadBtn.addEventListener("click", loadFromServer);
 saveBtn.addEventListener("click", saveToServer);
 fileInput.addEventListener("change", handleFileChange);
+refreshTableBtn.addEventListener("click", updateTableSectionsAndRender);
+tableSectionSelect.addEventListener("change", renderCurrentSection);
+
+
 
 
 

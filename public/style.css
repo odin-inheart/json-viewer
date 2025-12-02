@@ -45,6 +45,7 @@ html[data-bs-theme="dark"] .table-hover tbody tr:hover {
 
 #table-container {
   overflow-x: auto;
+  overflow: visible;
 }
 
 
@@ -57,7 +58,6 @@ html[data-bs-theme="dark"] .table-hover tbody tr:hover {
 
 #table-container table {
   border-radius: 6px;
-  overflow: hidden;
 }
 
 
@@ -131,4 +131,73 @@ html[data-bs-theme="dark"] .btn-outline-secondary:hover {
 /*Title stays black on white bg*/
 html[data-bs-theme="dark"] #site-title {
   color: #000 !important;
+}
+
+/* ================================
+   Excel-like table styling
+   ================================ */
+
+.excel-table {
+  table-layout: fixed;          
+  width: 100%;
+  min-width: 2400px;          /* for horizontal scroll */
+  border-collapse: collapse;
+  border: 1px solid rgba(0,0,0,0.1);
+
+}
+
+/* head */
+.excel-table thead th {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+/* cells */
+.excel-table tbody td.excel-cell {
+  font-size: 0.83rem;
+  border-top: 1px solid rgba(0,0,0,0.05);
+  vertical-align: middle;
+
+  padding: 6px 10px;             
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;      
+  cursor: text;
+}
+
+/* quand la cellule prend le focus pour édition */
+.excel-table tbody td.excel-cell:focus {
+  outline: 2px solid #0d6efd;
+  outline-offset: -1px;
+  background-color: rgba(13, 110, 253, 0.08);
+  white-space: normal;           
+  overflow: visible;             
+  max-width: none;              
+  z-index: 2;
+  position: relative;
+}
+
+/* Hover sur la ligne pour mieux suivre visuellement */
+.excel-table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* Checkbox centrée */
+.excel-table tbody td.excel-cell input[type="checkbox"] {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Mode sombre : harmoniser le tableau */
+html[data-bs-theme="dark"] .excel-table tbody td.excel-cell {
+  border-top-color: rgba(255,255,255,0.1);
+}
+
+html[data-bs-theme="dark"] .excel-table tbody tr:hover {
+  background-color: rgba(255,255,255,0.05);
 }
