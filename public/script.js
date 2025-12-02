@@ -627,8 +627,52 @@ cancelRowEditBtn.addEventListener("click", cancelRowEditing);
 window.addEventListener("DOMContentLoaded", () => {
   loadFromServer();
 });
+
 // -----------------------------
-// 7) Theme toggle (light / dark)
+// Download JSON as file
+// -----------------------------
+
+function downloadJsonFile() {
+  // Ensure current editor content is valid JSON before generating the file
+  let parsed;
+  try {
+    parsed = JSON.parse(editor.value);
+  } catch (err) {
+    setMessage("Cannot download: JSON is invalid.", "error");
+    return;
+  }
+
+  // Convert object to pretty JSON text
+  const jsonText = JSON.stringify(parsed, null, 2);
+
+  // Create a Blob (file-like object in memory)
+  const blob = new Blob([jsonText], { type: "application/json" });
+
+  // Create a temporary URL for the Blob
+  const url = URL.createObjectURL(blob);
+
+  // Create a temporary <a> element to trigger download
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "data.json"; // Name of the file the user will download
+  document.body.appendChild(a);
+  a.click();
+
+  // Clean up
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  setMessage("JSON downloaded.", "success");
+}
+
+// Attach listener
+const downloadBtn = document.getElementById("download-json");
+if (downloadBtn) {
+  downloadBtn.addEventListener("click", downloadJsonFile);
+}
+
+// -----------------------------
+// Theme toggle (light / dark)
 // -----------------------------
 
 const toggleThemeBtn = document.getElementById("toggle-theme-btn");
