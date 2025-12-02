@@ -369,12 +369,52 @@ function renderCurrentSection() {
 
 // 6) Render table with editable cells
 function renderTable() {
+  // Pas de données => message simple
   if (!tableRows.length || !tableColumns.length) {
     tableContainer.innerHTML =
       '<p class="text-muted mb-0">No data to display.</p>';
     return;
   }
 
+  // Récupérer le texte du filtre (si l'input existe)
+  let filterText = "";
+  if (tableFilterInput) {
+    filterText = tableFilterInput.value.trim().toLowerCase();
+  }
+
+  // Lignes affichées + index de mapping
+  const displayRows = [];
+  const displayRowIndices = [];
+
+  tableRows.forEach((row, idx) => {
+    if (!filterText) {
+      // Pas de filtre -> on garde tout
+      displayRows.push(row);
+      displayRowIndices.push(idx);
+      return;
+    }
+
+    // Vérifier si AU MOINS une colonne contient le texte
+    const matches = tableColumns.some((col) => {
+      const value = row[col];
+      if (value === null || value === undefined) return false;
+      return String(value).toLowerCase().includes(filterText);
+    });
+
+    if (matches) {
+      displayRows.push(row);
+      displayRowIndices.push(idx);
+    }
+  });
+
+  // Si aucune ligne ne matche le filtre
+  if (!displayRows.length) {
+    tableContainer.innerHTML =
+      '<p class="text-muted mb-0">No data matching the filter.</p>';
+    return;
+  }
+
+  // Construction du tableau HTML
   const table = document.createElement("table");
   table.className = "table table-sm table-striped table-hover mb-0 excel-table";
 
@@ -392,8 +432,11 @@ function renderTable() {
 
   const tbody = document.createElement("tbody");
 
-  tableRows.forEach((row, rowIndex) => {
+  displayRows.forEach((row, displayIndex) => {
     const tr = document.createElement("tr");
+
+    // index réel dans tableRows / rowMapping
+    const mappingIndex = displayRowIndices[displayIndex];
 
     tableColumns.forEach((col) => {
       const td = document.createElement("td");
@@ -402,26 +445,25 @@ function renderTable() {
       const value = row[col];
 
       if (typeof value === "boolean") {
-        // Checkbox for booleans
+        // Checkbox pour booléens
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = value;
 
         checkbox.addEventListener("change", () => {
-          applyCellUpdate(rowIndex, col, checkbox.checked);
+          applyCellUpdate(mappingIndex, col, checkbox.checked);
         });
 
         td.appendChild(checkbox);
-        td.title = String(value); // tooltip sur hover
+        td.title = String(value);
       } else {
-        // Editable text cell (ellipsis style handled by CSS)
         const text = value != null ? String(value) : "";
         td.contentEditable = true;
         td.textContent = text;
-        td.title = text; // tooltip avec la valeur complète
+        td.title = text;
 
         td.addEventListener("blur", () => {
-          applyCellUpdate(rowIndex, col, td.textContent);
+          applyCellUpdate(mappingIndex, col, td.textContent);
         });
       }
 
@@ -431,11 +473,11 @@ function renderTable() {
     tbody.appendChild(tr);
   });
 
-
   table.appendChild(tbody);
   tableContainer.innerHTML = "";
   tableContainer.appendChild(table);
 }
+
 
 // 7) Apply a cell update into workingJson using the mapping
 function applyCellUpdate(rowIndex, column, newValue) {
