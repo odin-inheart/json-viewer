@@ -364,42 +364,80 @@ function renderCurrentSection() {
   });
   tableColumns = Array.from(colSet);
 
+  updateColumnFilterOptions();
   renderTable();
 }
 
 // 6) Render table with editable cells
 function renderTable() {
-  // Pas de données => message simple
   if (!tableRows.length || !tableColumns.length) {
     tableContainer.innerHTML =
       '<p class="text-muted mb-0">No data to display.</p>';
     return;
   }
 
-  // Récupérer le texte du filtre (si l'input existe)
+  // Texte du filtre
   let filterText = "";
   if (tableFilterInput) {
     filterText = tableFilterInput.value.trim().toLowerCase();
   }
 
-  // Lignes affichées + index de mapping
+  // Colonne choisie dans le menu déroulant
+  let selectedColumn = "";
+  if (tableKeySelect) {
+    selectedColumn = tableKeySelect.value;
+  }
+
   const displayRows = [];
   const displayRowIndices = [];
 
   tableRows.forEach((row, idx) => {
-    if (!filterText) {
-      // Pas de filtre -> on garde tout
+    // 1) Si aucune colonne choisie ET pas de texte -> on affiche tout
+    if (!selectedColumn && !filterText) {
       displayRows.push(row);
       displayRowIndices.push(idx);
       return;
     }
 
-    // Vérifier si AU MOINS une colonne contient le texte
-    const matches = tableColumns.some((col) => {
-      const value = row[col];
-      if (value === null || value === undefined) return false;
-      return String(value).toLowerCase().includes(filterText);
-    });
+    // 2) Si une colonne est choisie, check si la ligne a une valeur dans cette colonne
+    let hasValueInColumn = true;
+    if (selectedColumn) {
+      const val = row[selectedColumn];
+      hasValueInColumn =
+        val !== null &&
+        val !== undefined &&
+        String(val).trim() !== "";
+    }
+
+    if (!hasValueInColumn) {
+      // Si on veut filtrer sur une colonne mais que la ligne n'a rien dans cette colonne, on la skip
+      return;
+    }
+
+    // 3) Gestion du filtre texte
+    if (!filterText) {
+      // colonne sélectionnée mais pas de texte -> juste "présence de valeur" dans cette colonne
+      displayRows.push(row);
+      displayRowIndices.push(idx);
+      return;
+    }
+
+    let matches = false;
+
+    if (selectedColumn) {
+      // texte + colonne sélectionnée -> on cherche dans CETTE colonne uniquement
+      const val = row[selectedColumn];
+      if (val !== null && val !== undefined) {
+        matches = String(val).toLowerCase().includes(filterText);
+      }
+    } else {
+      // texte mais aucune colonne sélectionnée -> on cherche dans TOUTES les colonnes
+      matches = tableColumns.some((col) => {
+        const val = row[col];
+        if (val === null || val === undefined) return false;
+        return String(val).toLowerCase().includes(filterText);
+      });
+    }
 
     if (matches) {
       displayRows.push(row);
@@ -407,14 +445,12 @@ function renderTable() {
     }
   });
 
-  // Si aucune ligne ne matche le filtre
   if (!displayRows.length) {
     tableContainer.innerHTML =
       '<p class="text-muted mb-0">No data matching the filter.</p>';
     return;
   }
 
-  // Construction du tableau HTML
   const table = document.createElement("table");
   table.className = "table table-sm table-striped table-hover mb-0 excel-table";
 
@@ -434,8 +470,6 @@ function renderTable() {
 
   displayRows.forEach((row, displayIndex) => {
     const tr = document.createElement("tr");
-
-    // index réel dans tableRows / rowMapping
     const mappingIndex = displayRowIndices[displayIndex];
 
     tableColumns.forEach((col) => {
@@ -445,7 +479,6 @@ function renderTable() {
       const value = row[col];
 
       if (typeof value === "boolean") {
-        // Checkbox pour booléens
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = value;
@@ -477,6 +510,33 @@ function renderTable() {
   tableContainer.innerHTML = "";
   tableContainer.appendChild(table);
 }
+
+
+function updateColumnFilterOptions() {
+  if (!tableKeySelect) return;
+
+  const previous = tableKeySelect.value;
+
+  tableKeySelect.innerHTML = "";
+
+  const optAll = document.createElement("option");
+  optAll.value = "";
+  optAll.textContent = "(All columns)";
+  tableKeySelect.appendChild(optAll);
+
+  tableColumns.forEach((col) => {
+    const opt = document.createElement("option");
+    opt.value = col;
+    opt.textContent = col;
+    tableKeySelect.appendChild(opt);
+  });
+
+  // Restaure la sélection si la colonne existe toujours
+  if (previous && tableColumns.includes(previous)) {
+    tableKeySelect.value = previous;
+  }
+}
+
 
 
 // 7) Apply a cell update into workingJson using the mapping
@@ -546,6 +606,13 @@ refreshTableBtn.addEventListener("click", updateTableSectionsAndRender);
 tableSectionSelect.addEventListener("change", renderCurrentSection);
 
 
+if (tableFilterInput) {
+  tableFilterInput.addEventListener("input", renderTable);
+}
+
+if (tableKeySelect) {
+  tableKeySelect.addEventListener("change", renderTable);
+}
 
 
 
