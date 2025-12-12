@@ -537,6 +537,21 @@ function updateColumnFilterOptions() {
   }
 }
 
+function resetTableFilters() {
+  // Effacer le texte du filtre
+  if (tableFilterInput) {
+    tableFilterInput.value = "";
+  }
+
+  // Remettre le select de colonne sur "(All columns)"
+  if (tableKeySelect) {
+    tableKeySelect.value = "";
+  }
+
+  // Re-rendre la table avec tous les éléments
+  renderTable();
+}
+
 
 
 // 7) Apply a cell update into workingJson using the mapping
@@ -602,7 +617,6 @@ function parseEditorJson() {
 loadBtn.addEventListener("click", loadFromServer);
 saveBtn.addEventListener("click", saveToServer);
 fileInput.addEventListener("change", handleFileChange);
-refreshTableBtn.addEventListener("click", updateTableSectionsAndRender);
 tableSectionSelect.addEventListener("change", renderCurrentSection);
 
 
@@ -613,6 +627,11 @@ if (tableFilterInput) {
 if (tableKeySelect) {
   tableKeySelect.addEventListener("change", renderTable);
 }
+
+if (refreshTableBtn) {
+  refreshTableBtn.addEventListener("click", resetTableFilters);
+}
+
 
 
 
@@ -721,6 +740,33 @@ if (toggleThemeBtn) {
     applyTheme(next);
   });
 }
+
+// -----------------------------
+// Switch "table" / "raw JSON"
+// -----------------------------
+const tableViewWrapper = document.getElementById("table-view-wrapper");
+const rawViewWrapper = document.getElementById("raw-view-wrapper");
+const viewToggleButtons = document.querySelectorAll("#view-toggle [data-view]");
+
+if (tableViewWrapper && rawViewWrapper && viewToggleButtons.length) {
+  viewToggleButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      // bouton actif
+      viewToggleButtons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const view = btn.dataset.view;
+      if (view === "table") {
+        tableViewWrapper.classList.remove("d-none");
+        rawViewWrapper.classList.add("d-none");
+      } else {
+        rawViewWrapper.classList.remove("d-none");
+        tableViewWrapper.classList.add("d-none");
+      }
+    });
+  });
+}
+
 
 // Initialize on page load
 initTheme();
