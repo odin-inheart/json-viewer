@@ -263,8 +263,8 @@ function buildTableProjection(json, sectionPath = []) {
     Object.entries(json).forEach(([key, value]) => {
       if (value && typeof value === "object") {
         rows.push({
-          __key: key,       // colonne d’affichage
-          ...value          // les champs d’origine
+          __key: key,       // display-only column (the object entry key)
+          ...value          // original fields from the source object
         });
         mapping.push({
           parentPath: [...sectionPath],
@@ -376,13 +376,13 @@ function renderTable() {
     return;
   }
 
-  // Texte du filtre
+  // Current filter text (free input)
   let filterText = "";
   if (tableFilterInput) {
     filterText = tableFilterInput.value.trim().toLowerCase();
   }
 
-  // Colonne choisie dans le menu déroulant
+  // Column selected in the dropdown
   let selectedColumn = "";
   if (tableKeySelect) {
     selectedColumn = tableKeySelect.value;
@@ -392,14 +392,14 @@ function renderTable() {
   const displayRowIndices = [];
 
   tableRows.forEach((row, idx) => {
-    // 1) Si aucune colonne choisie ET pas de texte -> on affiche tout
+    // 1) If no column selected AND no text -> show everything
     if (!selectedColumn && !filterText) {
       displayRows.push(row);
       displayRowIndices.push(idx);
       return;
     }
 
-    // 2) Si une colonne est choisie, check si la ligne a une valeur dans cette colonne
+    // 2) If a column is selected, only keep rows that have a non-empty value for it
     let hasValueInColumn = true;
     if (selectedColumn) {
       const val = row[selectedColumn];
@@ -410,13 +410,13 @@ function renderTable() {
     }
 
     if (!hasValueInColumn) {
-      // Si on veut filtrer sur une colonne mais que la ligne n'a rien dans cette colonne, on la skip
+      // If we're filtering by column presence but the row has nothing for that column, skip it
       return;
     }
 
-    // 3) Gestion du filtre texte
+    // 3) Text filtering logic
     if (!filterText) {
-      // colonne sélectionnée mais pas de texte -> juste "présence de valeur" dans cette colonne
+      // Column selected but no text -> just enforce "has a value in that column"
       displayRows.push(row);
       displayRowIndices.push(idx);
       return;
@@ -425,13 +425,13 @@ function renderTable() {
     let matches = false;
 
     if (selectedColumn) {
-      // texte + colonne sélectionnée -> on cherche dans CETTE colonne uniquement
+      // Text + column selected -> search ONLY within that column
       const val = row[selectedColumn];
       if (val !== null && val !== undefined) {
         matches = String(val).toLowerCase().includes(filterText);
       }
     } else {
-      // texte mais aucune colonne sélectionnée -> on cherche dans TOUTES les colonnes
+      // Text but no column selected -> search across ALL columns
       matches = tableColumns.some((col) => {
         const val = row[col];
         if (val === null || val === undefined) return false;
@@ -531,24 +531,24 @@ function updateColumnFilterOptions() {
     tableKeySelect.appendChild(opt);
   });
 
-  // Restaure la sélection si la colonne existe toujours
+  // Restore selection if the column still exists
   if (previous && tableColumns.includes(previous)) {
     tableKeySelect.value = previous;
   }
 }
 
 function resetTableFilters() {
-  // Effacer le texte du filtre
+  // Clear the filter input text
   if (tableFilterInput) {
     tableFilterInput.value = "";
   }
 
-  // Remettre le select de colonne sur "(All columns)"
+  // Reset the column dropdown back to "(All columns)"
   if (tableKeySelect) {
     tableKeySelect.value = "";
   }
 
-  // Re-rendre la table avec tous les éléments
+  // Re-render the table with everything visible again
   renderTable();
 }
 
@@ -751,7 +751,7 @@ const viewToggleButtons = document.querySelectorAll("#view-toggle [data-view]");
 if (tableViewWrapper && rawViewWrapper && viewToggleButtons.length) {
   viewToggleButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      // bouton actif
+      // Set active button style
       viewToggleButtons.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
 
@@ -770,4 +770,3 @@ if (tableViewWrapper && rawViewWrapper && viewToggleButtons.length) {
 
 // Initialize on page load
 initTheme();
-
