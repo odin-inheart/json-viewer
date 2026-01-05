@@ -32,7 +32,7 @@ html[data-bs-theme="dark"] .table-hover tbody tr:hover {
 .table td, .table th {
   padding: 8px 12px !important;
   vertical-align: middle;
-  white-space: nowrap;          /* Prevent long words from crushing */
+  white-space: nowrap;         
 }
 
 
@@ -65,14 +65,13 @@ html[data-bs-theme="dark"] .table-hover tbody tr:hover {
   background-color: #f0f4ff !important;
 }
 
-/* Suite Dark Mode*/
 /* Dark mode overrides */
 html[data-bs-theme="dark"] body {
   background-color: #121212;
   color: #f8f9fa;
 }
 
-/* Cards / main containers if you en as */
+/* main container*/
 html[data-bs-theme="dark"] .card {
   background-color: #1e1e1e;
   border-color: #333;
@@ -100,7 +99,7 @@ html[data-bs-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) {
   --bs-table-accent-bg: #191919;
 }
 
-/* Inputs / textareas / selects */
+
 html[data-bs-theme="dark"] .form-control,
 html[data-bs-theme="dark"] .form-select {
   background-color: #1e1e1e;
@@ -112,7 +111,7 @@ html[data-bs-theme="dark"] .form-control::placeholder {
   color: #aaaaaa;
 }
 
-/* Buttons */
+/* buttons */
 html[data-bs-theme="dark"] .btn-primary {
   background-color: #0d6efd;
   border-color: #0d6efd;
@@ -128,7 +127,7 @@ html[data-bs-theme="dark"] .btn-outline-secondary:hover {
   color: #121212;
 }
 
-/*Title stays black on white bg*/
+
 html[data-bs-theme="dark"] #site-title {
   color: #000 !important;
 }
@@ -170,7 +169,7 @@ html[data-bs-theme="dark"] #site-title {
   cursor: text;
 }
 
-/* when cells is focused for editing */
+/* cell focus */
 .excel-table tbody td.excel-cell:focus {
   outline: 2px solid #0d6efd;
   outline-offset: -1px;
@@ -182,12 +181,12 @@ html[data-bs-theme="dark"] #site-title {
   position: relative;
 }
 
-/* Hover on line for brtter visual */
+
 .excel-table tbody tr:hover {
   background-color: rgba(0, 0, 0, 0.03);
 }
 
-/* centered checkbox */
+
 .excel-table tbody td.excel-cell input[type="checkbox"] {
   display: block;
   margin: 0 auto;

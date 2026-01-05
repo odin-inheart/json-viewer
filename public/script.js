@@ -1,8 +1,12 @@
+
 const editor = document.getElementById("json-editor");
 const loadBtn = document.getElementById("load-from-server");
 const saveBtn = document.getElementById("save-to-server");
 const fileInput = document.getElementById("json-file-input");
 const message = document.getElementById("message");
+const findNextBtn = document.getElementById('raw-find-next')
+const findPrevBtn = document.getElementById('raw-find-prev')
+const rawWrapper = document.getElementById('raw-view-wrapper')
 
 // Elements for the table view
 const refreshTableBtn = document.getElementById("refresh-table");
@@ -10,6 +14,8 @@ const tableSectionSelect = document.getElementById("table-section-select");
 const tableFilterInput = document.getElementById("table-filter-input");
 const tableContainer = document.getElementById("table-container");
 const tableKeySelect = document.getElementById("table-key-select");
+const rawFindNextBtn = document.getElementById("raw-find-next");
+const rawFindPrevBtn = document.getElementById("raw-find-prev");
 
 // Row editing controls (Option 2)
 const applyRowEditBtn = document.getElementById("apply-row-edit");
@@ -25,7 +31,9 @@ let currentSection = null;     // currently selected section
 let tableRows = [];            // rows to display in table
 let tableColumns = [];         // columns (keys)
 let rowMapping = [];           // mapping row -> where it lives in workingJson
-
+let rawMatches = [];          // positions of matches in raw JSON view
+let rawMatchIndex = -1;    // current index in rawMatches
+let rawSearchDebounceTimer = null; // debounce timer for raw search
 
 
 // Display status messages to the user
@@ -67,7 +75,7 @@ async function loadFromServer() {
 
     setMessage("JSON loaded from server.", "success");
 
-    // Rebuild sections & table from workingJson
+    // Rebuild sections & table from workingJson. 
     updateTableSectionsAndRender();
 
   } catch (error) {
@@ -82,13 +90,7 @@ async function loadFromServer() {
 
 async function saveToServer() {
   // Do not allow saving while only a single row is being edited
-  if (rowEditMode) {
-    setMessage(
-      "You are currently editing a single entry. Apply or cancel the row edit before saving the full JSON.",
-      "error"
-    );
-    return;
-  }
+
 
   try {
     setMessage("Validating JSON...");
@@ -511,7 +513,7 @@ function renderTable() {
   tableContainer.appendChild(table);
 }
 
-
+// Update the column filter dropdown options
 function updateColumnFilterOptions() {
   if (!tableKeySelect) return;
 
@@ -536,7 +538,126 @@ function updateColumnFilterOptions() {
     tableKeySelect.value = previous;
   }
 }
+// Build raw search needle based on filter input + selected column
+function buildRawSearchNeedle() {
+  const section = tableSectionSelect?.value || "";
+  const text = (tableFilterInput?.value || "").trim();
+  const key = tableKeySelect?.value || "";
 
+  // If user chooses a section, we search for that section key only
+  if (section && section !== "__root__") {
+    return { mode: "keyOnly", needleKey: `"${section}"`, needleText: "" };
+  }
+
+  // If user chooses a column, we search for the JSON key + value pattern
+  if (key && text) {
+    // e.g: "name": "abc" -> we search key + text
+    return { mode: "key+text", needleKey: `"${key}"`, needleText: text };
+  }
+
+  if (key && !text) {
+    return { mode: "keyOnly", needleKey: `"${key}"`, needleText: "" };
+  }
+
+  if (!key && text) {
+    return { mode: "textOnly", needleKey: "", needleText: text };
+  }
+
+  return { mode: "none", needleKey: "", needleText: "" };
+}
+
+
+function computeRawMatches() {
+  const haystack = editor.value;
+  const { mode, needleKey, needleText } = buildRawSearchNeedle();
+
+  rawMatches = [];
+  rawMatchIndex = -1;
+
+  if (mode === "none") {
+    return;
+  }
+
+  const H = haystack.toLowerCase();
+  const K = needleKey.toLowerCase();
+  const T = needleText.toLowerCase();
+
+  if (mode === "keyOnly") {
+    let pos = 0;
+    while (true) {
+      const i = H.indexOf(K, pos);
+      if (i === -1) break;
+      rawMatches.push({ start: i, end: i + needleKey.length });
+      pos = i + 1;
+    }
+  }
+
+  if (mode === "textOnly") {
+    let pos = 0;
+    while (true) {
+      const i = H.indexOf(T, pos);
+    }
+  }
+  if (mode === "key+text") {
+    let pos = 0;
+    while (true) {
+      const i = H.indexOf(K, pos);
+      if (i === -1) break;
+
+      const windowStart = i;
+      const windowEnd = Math.min(H.length, i + 400);
+      const windowStr = H.slice(windowStart, windowEnd);
+
+      const j = windowStr.indexOf(T);
+      if (j !== -1) {
+        const matchStart = windowStart + j;
+        rawMatches.push({ start: matchStart, end: matchStart + needleText.length });
+      }
+      pos = i + 1;
+    }
+  }
+}
+
+function goToRawMatch(direction = 1, shouldFocus = false) {
+  if (!rawMatches.length) {
+    setMessage("Aucun résultat dans le JSON brut.", "info");
+    return;
+  }
+
+  rawMatchIndex += direction;
+
+  if (rawMatchIndex >= rawMatches.length) rawMatchIndex = 0;
+  if (rawMatchIndex < 0) rawMatchIndex = rawMatches.length - 1;
+
+  const { start, end } = rawMatches[rawMatchIndex];
+
+
+  editor.setSelectionRange(start, end);
+  if (shouldFocus) editor.focus();
+
+  setMessage(`Résultat ${rawMatchIndex + 1}/${rawMatches.length} (vue JSON brut)`, "info");
+}
+
+
+function syncRawSearchFromFilters() {
+  if (rawViewWrapper?.classList.contains("d-none")) return;
+
+  computeRawMatches();
+  rawMatchIndex = -1;
+  if (rawMatches.length) goToRawMatch(1, false);
+}
+
+function debouncedSyncRawSearch() {
+  if (rawSearchDebounceTimer) {
+    clearTimeout(rawSearchDebounceTimer);
+  }
+
+  rawSearchDebounceTimer = setTimeout(() => {
+    syncRawSearchFromFilters();
+  }, 250);
+}
+
+// Reset table filters
 function resetTableFilters() {
   // Clear the filter input text
   if (tableFilterInput) {
@@ -621,8 +742,15 @@ tableSectionSelect.addEventListener("change", renderCurrentSection);
 
 
 if (tableFilterInput) {
-  tableFilterInput.addEventListener("input", renderTable);
+  tableFilterInput.addEventListener("input", () => {
+    if (isRawModeActive()) {
+      buildRawMatches();
+      return;
+    }
+    renderTable();
+  });
 }
+
 
 if (tableKeySelect) {
   tableKeySelect.addEventListener("change", renderTable);
@@ -631,6 +759,19 @@ if (tableKeySelect) {
 if (refreshTableBtn) {
   refreshTableBtn.addEventListener("click", resetTableFilters);
 }
+
+if (tableFilterInput) tableFilterInput.addEventListener("input", debouncedSyncRawSearch);
+if (tableKeySelect) tableKeySelect.addEventListener("change", syncRawSearchFromFilters);
+if (tableSectionSelect) tableSectionSelect.addEventListener("change", syncRawSearchFromFilters);
+
+if (findNextBtn) {
+  findNextBtn.addEventListener("click", () => jumpToRawMatch(+1));
+}
+
+if (findPrevBtn) {
+  findPrevBtn.addEventListener("click", () => jumpToRawMatch(-1));
+}
+
 
 
 
@@ -666,11 +807,10 @@ function downloadJsonFile() {
   // Create a temporary <a> element to trigger download
   const a = document.createElement("a");
   a.href = url;
-  a.download = "data.json"; // Name of the file the user will download
+  a.download = "data.json"; // name of the file the user will dl (placeholder)
   document.body.appendChild(a);
   a.click();
 
-  // Clean up
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
@@ -765,6 +905,82 @@ if (tableViewWrapper && rawViewWrapper && viewToggleButtons.length) {
       }
     });
   });
+}
+
+//========================================
+// Finder for raw JSON
+//========================================
+
+
+
+const rawFindState = {
+  query: "",
+  matches: [],
+  index: -1,
+};
+
+function isRawModeActive() {
+  return rawWrapper && !rawWrapper.classList.contains('d-none');
+}
+
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildRawMatches() {
+  if (!isRawModeActive()) return;
+
+  const query = (tableFilterInput?.value || "").trim();
+  rawFindState.query = query;
+  rawFindState.matches = [];
+  rawFindState.index = -1;
+
+  if (!query) {
+    setMessage("Type something to search in Raw JSON.", "info");
+    return;
+  }
+
+  const text = editor.value || "";
+  const regex = new RegExp(escapeRegExp(query), "gi");
+
+
+  let m;
+  while ((m = regex.exec(text)) !== null) {
+    rawFindState.matches.push({ start: m.index, end: m.index + m[0].length });
+
+    if (m.index === regex.lastIndex) regex.lastIndex++;
+  }
+
+  if (rawFindState.matches.length === 0) {
+    setMessage(`No matches for "${query}".`, "error");
+  } else {
+    setMessage(
+      `${rawFindState.matches.length} match(es) for "${query}". Use Next/Previous.`,
+      "success"
+    );
+  }
+}
+function jumpToRawMatch(direction){
+  if (!isRawModeActive()) return;
+  if (!rawFindState.query || rawFindState.matches.length === 0) {
+    buildRawMatches();
+    if (rawFindState.matches.length === 0) return;
+  }
+
+  const total = rawFindState.matches.length;
+  rawFindState.index = (rawFindState.index + direction + total) % total;
+
+  const { start, end } = rawFindState.matches[rawFindState.index];
+
+  editor.focus();
+  editor.setSelectionRange(start, end);
+
+  const before = editor.value.slice(0, start);
+  const line = before.split("\n").length;
+  const approxLineHeight = 18;
+  editor.scrollTop = Math.max(0, (line - 3) * approxLineHeight);
+
+  setMessage(`Match ${rawFindState.index + 1}/${total}`,"info");
 }
 
 
