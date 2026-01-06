@@ -4,9 +4,6 @@ const loadBtn = document.getElementById("load-from-server");
 const saveBtn = document.getElementById("save-to-server");
 const fileInput = document.getElementById("json-file-input");
 const message = document.getElementById("message");
-const findNextBtn = document.getElementById('raw-find-next')
-const findPrevBtn = document.getElementById('raw-find-prev')
-const rawWrapper = document.getElementById('raw-view-wrapper')
 
 // Elements for the table view
 const refreshTableBtn = document.getElementById("refresh-table");
@@ -17,26 +14,17 @@ const tableKeySelect = document.getElementById("table-key-select");
 const rawFindNextBtn = document.getElementById("raw-find-next");
 const rawFindPrevBtn = document.getElementById("raw-find-prev");
 
-// Row editing controls (Option 2)
-const applyRowEditBtn = document.getElementById("apply-row-edit");
-const cancelRowEditBtn = document.getElementById("cancel-row-edit");
+
 
 // In-memory state
-// In-memory state
-let originalJson = null;       // JSON as loaded from server/file (reference)
-let workingJson = null;        // JSON that user edits (we send back to server)
-let tableSections = [];        // sections for the <select> (root, Meshes, etc.)
-let currentSection = null;     // currently selected section
-
+let workingJson = null;        // JSON that user edits 
+let tableSections = [];        // sections for the <select>
 let tableRows = [];            // rows to display in table
 let tableColumns = [];         // columns (keys)
 let rowMapping = [];           // mapping row -> where it lives in workingJson
-let rawMatches = [];          // positions of matches in raw JSON view
-let rawMatchIndex = -1;    // current index in rawMatches
-let rawSearchDebounceTimer = null; // debounce timer for raw search
 
 
-// Display status messages to the user
+//status messages to the user
 function setMessage(text, type = "info") {
   message.textContent = text;
 
@@ -185,10 +173,6 @@ function handleFileChange(event) {
 }
 
 // -----------------------------
-// Table view (JSON analysis)
-// -----------------------------
-
-// -----------------------------
 // Table view (projection + mapping)
 // -----------------------------
 
@@ -197,7 +181,7 @@ function computeTableSections(rootJson) {
   const sections = [];
   if (!rootJson) return sections;
 
-  // Case 1: root is an array of objects -> "__root__"
+  
   if (Array.isArray(rootJson) && rootJson.length > 0 && typeof rootJson[0] === "object") {
     sections.push({
       id: "__root__",
@@ -538,124 +522,7 @@ function updateColumnFilterOptions() {
     tableKeySelect.value = previous;
   }
 }
-// Build raw search needle based on filter input + selected column
-function buildRawSearchNeedle() {
-  const section = tableSectionSelect?.value || "";
-  const text = (tableFilterInput?.value || "").trim();
-  const key = tableKeySelect?.value || "";
 
-  // If user chooses a section, we search for that section key only
-  if (section && section !== "__root__") {
-    return { mode: "keyOnly", needleKey: `"${section}"`, needleText: "" };
-  }
-
-  // If user chooses a column, we search for the JSON key + value pattern
-  if (key && text) {
-    // e.g: "name": "abc" -> we search key + text
-    return { mode: "key+text", needleKey: `"${key}"`, needleText: text };
-  }
-
-  if (key && !text) {
-    return { mode: "keyOnly", needleKey: `"${key}"`, needleText: "" };
-  }
-
-  if (!key && text) {
-    return { mode: "textOnly", needleKey: "", needleText: text };
-  }
-
-  return { mode: "none", needleKey: "", needleText: "" };
-}
-
-
-function computeRawMatches() {
-  const haystack = editor.value;
-  const { mode, needleKey, needleText } = buildRawSearchNeedle();
-
-  rawMatches = [];
-  rawMatchIndex = -1;
-
-  if (mode === "none") {
-    return;
-  }
-
-  const H = haystack.toLowerCase();
-  const K = needleKey.toLowerCase();
-  const T = needleText.toLowerCase();
-
-  if (mode === "keyOnly") {
-    let pos = 0;
-    while (true) {
-      const i = H.indexOf(K, pos);
-      if (i === -1) break;
-      rawMatches.push({ start: i, end: i + needleKey.length });
-      pos = i + 1;
-    }
-  }
-
-  if (mode === "textOnly") {
-    let pos = 0;
-    while (true) {
-      const i = H.indexOf(T, pos);
-    }
-  }
-  if (mode === "key+text") {
-    let pos = 0;
-    while (true) {
-      const i = H.indexOf(K, pos);
-      if (i === -1) break;
-
-      const windowStart = i;
-      const windowEnd = Math.min(H.length, i + 400);
-      const windowStr = H.slice(windowStart, windowEnd);
-
-      const j = windowStr.indexOf(T);
-      if (j !== -1) {
-        const matchStart = windowStart + j;
-        rawMatches.push({ start: matchStart, end: matchStart + needleText.length });
-      }
-      pos = i + 1;
-    }
-  }
-}
-
-function goToRawMatch(direction = 1, shouldFocus = false) {
-  if (!rawMatches.length) {
-    setMessage("Aucun résultat dans le JSON brut.", "info");
-    return;
-  }
-
-  rawMatchIndex += direction;
-
-  if (rawMatchIndex >= rawMatches.length) rawMatchIndex = 0;
-  if (rawMatchIndex < 0) rawMatchIndex = rawMatches.length - 1;
-
-  const { start, end } = rawMatches[rawMatchIndex];
-
-
-  editor.setSelectionRange(start, end);
-  if (shouldFocus) editor.focus();
-
-  setMessage(`Résultat ${rawMatchIndex + 1}/${rawMatches.length} (vue JSON brut)`, "info");
-}
-
-
-function syncRawSearchFromFilters() {
-  if (rawViewWrapper?.classList.contains("d-none")) return;
-
-  computeRawMatches();
-  rawMatchIndex = -1;
-  if (rawMatches.length) goToRawMatch(1, false);
-}
-
-function debouncedSyncRawSearch() {
-  if (rawSearchDebounceTimer) {
-    clearTimeout(rawSearchDebounceTimer);
-  }
-
-  rawSearchDebounceTimer = setTimeout(() => {
-    syncRawSearchFromFilters();
-  }, 250);
-}
 
 // Reset table filters
 function resetTableFilters() {
@@ -718,17 +585,7 @@ function parseCellValue(value) {
 }
 
 
-// Parse the editor content as JSON
-function parseEditorJson() {
-  try {
-    const text = editor.value;
-    const parsed = JSON.parse(text);
-    return parsed;
-  } catch (error) {
-    console.warn("Unable to parse JSON from editor:", error);
-    return null;
-  }
-}
+
 
 
 // -----------------------------
@@ -760,16 +617,12 @@ if (refreshTableBtn) {
   refreshTableBtn.addEventListener("click", resetTableFilters);
 }
 
-if (tableFilterInput) tableFilterInput.addEventListener("input", debouncedSyncRawSearch);
-if (tableKeySelect) tableKeySelect.addEventListener("change", syncRawSearchFromFilters);
-if (tableSectionSelect) tableSectionSelect.addEventListener("change", syncRawSearchFromFilters);
-
-if (findNextBtn) {
-  findNextBtn.addEventListener("click", () => jumpToRawMatch(+1));
+if (rawFindNextBtn) {
+  rawFindNextBtn.addEventListener("click", () => jumpToRawMatch(+1));
 }
 
-if (findPrevBtn) {
-  findPrevBtn.addEventListener("click", () => jumpToRawMatch(-1));
+if (rawFindPrevBtn) {
+  rawFindPrevBtn.addEventListener("click", () => jumpToRawMatch(-1));
 }
 
 
@@ -920,7 +773,7 @@ const rawFindState = {
 };
 
 function isRawModeActive() {
-  return rawWrapper && !rawWrapper.classList.contains('d-none');
+  return rawViewWrapper && !rawViewWrapper.classList.contains('d-none');
 }
 
 function escapeRegExp(str) {
