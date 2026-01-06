@@ -237,4 +237,4 @@ The application displays clear messages when:
 - Always save explicitly after editing
 - Prefer table view for structured edits
 - Use raw view for inspection and advanced search
-- Do not edit identifier keys unless necessary
+- Can not edit identifier keys
