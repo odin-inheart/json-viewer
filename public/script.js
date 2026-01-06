@@ -19,9 +19,9 @@ const rawFindPrevBtn = document.getElementById("raw-find-prev");
 // In-memory state
 let workingJson = null;        // JSON that user edits 
 let tableSections = [];        // sections for the <select>
-let tableRows = [];            // rows to display in table
-let tableColumns = [];         // columns (keys)
-let rowMapping = [];           // mapping row -> where it lives in workingJson
+let tableRows = [];            // rows in table
+let tableColumns = [];         // columns
+let rowMapping = [];           
 
 
 //status messages to the user
@@ -54,8 +54,7 @@ async function loadFromServer() {
 
     const data = await response.json();
 
-    // Store JSON
-    originalJson = data;
+
     // Deep copy for working version
     workingJson = JSON.parse(JSON.stringify(data));
 
@@ -77,8 +76,6 @@ async function loadFromServer() {
 // ----------------------
 
 async function saveToServer() {
-  // Do not allow saving while only a single row is being edited
-
 
   try {
     setMessage("Validating JSON...");
@@ -111,7 +108,7 @@ async function saveToServer() {
     const result = await response.json();
 
     if (result.success) {
-      lastParsedJson = parsed;
+      workingJson = parsed;
       setMessage("JSON successfully saved on the server.", "success");
     } else {
       setMessage("The server returned an error while saving JSON.", "error");
@@ -145,7 +142,6 @@ function handleFileChange(event) {
       const content = reader.result;
       const parsed = JSON.parse(content);
 
-      originalJson = parsed;
       workingJson = JSON.parse(JSON.stringify(parsed));
 
       editor.value = JSON.stringify(workingJson, null, 2);
@@ -270,7 +266,6 @@ function buildTableProjection(json, sectionPath = []) {
 function updateTableSectionsAndRender() {
   if (!workingJson) {
     tableSections = [];
-    currentSection = null;
     tableContainer.innerHTML =
       '<p class="text-muted mb-0">No data available.</p>';
     return;
@@ -303,12 +298,8 @@ function fillTableSectionSelect() {
   // Restore previous selection if possible
   if (previousSelection && tableSections.some((s) => s.id === previousSelection)) {
     tableSectionSelect.value = previousSelection;
-    currentSection = tableSections.find((s) => s.id === previousSelection) || null;
   } else if (tableSections.length > 0) {
     tableSectionSelect.value = tableSections[0].id;
-    currentSection = tableSections[0];
-  } else {
-    currentSection = null;
   }
 }
 
@@ -335,7 +326,6 @@ function renderCurrentSection() {
     return;
   }
 
-  currentSection = section;
 
   const { rows, mapping } = buildTableProjection(section.json, section.path);
   tableRows = rows;
