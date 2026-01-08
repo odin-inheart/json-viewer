@@ -28,7 +28,7 @@ html[data-bs-theme="dark"] .table-hover tbody tr:hover {
   font-size: 0.9rem;
 }
 
-/* More readable table rows */
+/*table rows */
 .table td, .table th {
   padding: 8px 12px !important;
   vertical-align: middle;
@@ -139,7 +139,7 @@ html[data-bs-theme="dark"] #site-title {
 .excel-table {
   table-layout: fixed;          
   width: 100%;
-  min-width: 2400px;          /* for horizontal scroll */
+  min-width: 2400px;
   border-collapse: collapse;
   border: 1px solid rgba(0,0,0,0.1);
 
