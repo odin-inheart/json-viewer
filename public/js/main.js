@@ -19,7 +19,7 @@ ui.saveBtn?.addEventListener("click", async () => {
 
 ui.fileInput?.addEventListener("change", (e) => {
   handleFileChange(e);
-  // FileReader is async; refresh after it loads (on cleanera ensuite)
+  // FileReader is async
   setTimeout(() => updateTableSectionsAndRender(), 0);
 });
 
