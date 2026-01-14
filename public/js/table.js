@@ -159,19 +159,14 @@ export function applyCellUpdate(rowIndex, column, newValue) {
     return;
   }
 
+  if (info.index != null)
+    parent[info.index][column] = parseCellValue(newValue);
+  else if (info.key != null)
+    parent[info.key][column] = parseCellValue(newValue);
 
-  parent[newKey] = parent[oldKey];
-  delete parent[oldKey];
-
-  // refresh table & raw editor
-  renderCurrentSection();
   if (ui.editor) ui.editor.value = JSON.stringify(store.workingJson, null, 2);
-
-  setMessage(`Key renamed: ${oldKey} → ${newKey}`, "info");
-  return;
+  setMessage("Change applied (not saved to server yet).", "info");
 }
-
-
 
 
 export function renderCurrentSection() {
