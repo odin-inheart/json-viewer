@@ -116,21 +116,63 @@ export function parseCellValue(value) {
   return trimmed;
 }
 
+export function renameKeyPreserveOrder(obj, oldKey, newKey) {
+  const keys = Object.keys(obj);
+  const entries = keys.map((k) => [k === oldKey ? newKey : k, obj[k]]);
+  for (const k of keys) delete obj[k];
+  for (const [k, v] of entries) obj[k] = v;
+}
+
+
 export function applyCellUpdate(rowIndex, column, newValue) {
   const info = rowMapping[rowIndex];
   if (!info || !store.workingJson) return;
 
   let parent = store.workingJson;
-  info.parentPath.forEach((key) => {
-    parent = parent[key];
+  info.parentPath.forEach((k) => {
+    parent = parent[k];
   });
 
-  if (info.index != null) parent[info.index][column] = parseCellValue(newValue);
-  else if (info.key != null) parent[info.key][column] = parseCellValue(newValue);
 
+  if (column === "__key") {
+    if (info.key == null) {
+      setMessage("__key can only be edited on object-based sections.", "warning");
+      return;
+    }
+
+    const oldKey = info.key;
+    const newKey = String(newValue).trim();
+    if (!newKey || newKey === oldKey) return;
+
+    if (Object.prototype.hasOwnProperty.call(parent, newKey)) {
+      setMessage(`Key "${newKey}" already exists.`, "warning");
+      return;
+    }
+
+    renameKeyPreserveOrder(parent, oldKey, newKey);
+
+    // refresh table & raw editor
+    renderCurrentSection();
+    if (ui.editor) ui.editor.value = JSON.stringify(store.workingJson, null, 2);
+
+    setMessage(`Key renamed: ${oldKey} → ${newKey}`, "info");
+    return;
+  }
+
+
+  parent[newKey] = parent[oldKey];
+  delete parent[oldKey];
+
+  // refresh table & raw editor
+  renderCurrentSection();
   if (ui.editor) ui.editor.value = JSON.stringify(store.workingJson, null, 2);
-  setMessage("Change applied (not saved to server yet).", "info");
+
+  setMessage(`Key renamed: ${oldKey} → ${newKey}`, "info");
+  return;
 }
+
+
+
 
 export function renderCurrentSection() {
   const selectedId = ui.tableSectionSelect?.value;
