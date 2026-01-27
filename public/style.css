@@ -1,0 +1,202 @@
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+/* Support dark mode */
+html[data-bs-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-bs-theme="dark"] body {
+  background-color: #121212;
+  color: #f8f9fa;
+}
+
+html[data-bs-theme="dark"] .table th {
+  background-color: #1f1f1f;
+  border-bottom-color: #333;
+}
+
+html[data-bs-theme="dark"] .table-hover tbody tr:hover {
+  background-color: #1e2740 !important;
+}
+
+
+#json-editor {
+  font-family: "Fira Code", "Consolas", monospace;
+  font-size: 0.9rem;
+}
+
+/*table rows */
+.table td, .table th {
+  padding: 8px 12px !important;
+  vertical-align: middle;
+  white-space: nowrap;         
+}
+
+
+.table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+  border-bottom: 2px solid #ddd;
+}
+
+
+#table-container {
+  overflow-x: auto;
+  overflow: visible;
+}
+
+
+#json-editor {
+  font-family: "Fira Code", Consolas, monospace;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+
+#table-container table {
+  border-radius: 6px;
+}
+
+
+.table-hover tbody tr:hover {
+  background-color: #f0f4ff !important;
+}
+
+/* Dark mode overrides */
+html[data-bs-theme="dark"] body {
+  background-color: #121212;
+  color: #f8f9fa;
+}
+
+/* main container*/
+html[data-bs-theme="dark"] .card {
+  background-color: #1e1e1e;
+  border-color: #333;
+}
+
+/* Table global background + text */
+html[data-bs-theme="dark"] .table {
+  background-color: #1e1e1e;
+  color: #f8f9fa;
+}
+
+/* Table header */
+html[data-bs-theme="dark"] .table th {
+  background-color: #252525;
+  border-bottom-color: #3a3a3a;
+}
+
+/* Row hover */
+html[data-bs-theme="dark"] .table-hover tbody tr:hover {
+  background-color: #2a3245 !important;
+}
+
+/* Striped rows */
+html[data-bs-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) {
+  --bs-table-accent-bg: #191919;
+}
+
+
+html[data-bs-theme="dark"] .form-control,
+html[data-bs-theme="dark"] .form-select {
+  background-color: #1e1e1e;
+  color: #f8f9fa;
+  border-color: #444;
+}
+
+html[data-bs-theme="dark"] .form-control::placeholder {
+  color: #aaaaaa;
+}
+
+/* buttons */
+html[data-bs-theme="dark"] .btn-primary {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+html[data-bs-theme="dark"] .btn-outline-secondary {
+  color: #f8f9fa;
+  border-color: #aaaaaa;
+}
+
+html[data-bs-theme="dark"] .btn-outline-secondary:hover {
+  background-color: #aaaaaa;
+  color: #121212;
+}
+
+
+html[data-bs-theme="dark"] #site-title {
+  color: #000 !important;
+}
+
+/* ================================
+   Excel-like table styling
+   ================================ */
+
+.excel-table {
+  table-layout: fixed;          
+  width: 100%;
+  min-width: 2400px;
+  border-collapse: collapse;
+  border: 1px solid rgba(0,0,0,0.1);
+
+}
+
+/* head */
+.excel-table thead th {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+/* cells */
+.excel-table tbody td.excel-cell {
+  font-size: 0.83rem;
+  border-top: 1px solid rgba(0,0,0,0.05);
+  vertical-align: middle;
+
+  padding: 6px 10px;             
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;      
+  cursor: text;
+}
+
+/* cell focus */
+.excel-table tbody td.excel-cell:focus {
+  outline: 2px solid #0d6efd;
+  outline-offset: -1px;
+  background-color: rgba(13, 110, 253, 0.08);
+  white-space: normal;           
+  overflow: visible;             
+  max-width: none;              
+  z-index: 2;
+  position: relative;
+}
+
+
+.excel-table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+
+.excel-table tbody td.excel-cell input[type="checkbox"] {
+  display: block;
+  margin: 0 auto;
+}
+
+/* dark mode */
+html[data-bs-theme="dark"] .excel-table tbody td.excel-cell {
+  border-top-color: rgba(255,255,255,0.1);
+}
+
+html[data-bs-theme="dark"] .excel-table tbody tr:hover {
+  background-color: rgba(255,255,255,0.05);
+}
